@@ -269,7 +269,7 @@
      service
     </footer>
     <script src="asset/js/alpine.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js'"></script>
     <script>
       const app = {
         authenticated: false,
@@ -343,19 +343,29 @@
         },
         async generateQRCode(link, $nextTick, $refs) {
           try {
-            // 使用 qrcode.js 生成 QR code
-            const canvas = document.createElement('canvas')
-            await QRCode.toCanvas(canvas, link, {
+            // 检查 QRCode 库是否可用
+            if (typeof QRCode === 'undefined') {
+              console.warn('QRCode 库未加载，等待加载...')
+              // 等待一段时间后重试
+              await new Promise(resolve => setTimeout(resolve, 500))
+              if (typeof QRCode === 'undefined') {
+                throw new Error('QRCode 库加载失败，请检查网络连接')
+              }
+            }
+
+            // 使用 toDataURL 方法直接生成图片，更简单可靠
+            const dataUrl = await QRCode.toDataURL(link, {
               width: 256,
               margin: 2,
               color: {
                 dark: '#33404d',
                 light: '#ffffff'
-              }
+              },
+              errorCorrectionLevel: 'M'
             })
             
-            // 将 canvas 转换为 HTML
-            this.qrCodeHtml = canvas.outerHTML
+            // 将生成的图片 URL 设置为 HTML
+            this.qrCodeHtml = `<img src="${dataUrl}" alt="QR Code" style="max-width: 100%; height: auto; display: block; margin: 0 auto;" />`
             
             $nextTick(() => {
               $refs.url.select()
@@ -364,6 +374,7 @@
           } catch (e) {
             console.error('生成 QR code 失败:', e)
             // 即使 QR code 生成失败，也显示成功消息
+            this.qrCodeHtml = `<p style="color: #ff8787; text-align: center;">二维码生成失败: ${e.message}</p>`
             $nextTick(() => {
               $refs.url.select()
               this.alert = { type: 'success', message: `链接 ${document.execCommand('Copy') ? '复制' : '生成'} ` }
