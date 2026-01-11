@@ -29,6 +29,30 @@ export async function onRequest(context) {
     }
 // export async function onRequestPost(context) {
     const { request, env } = context;
+    
+    // 检查登录状态
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        if (key && value) {
+            acc[key] = value;
+        }
+        return acc;
+    }, {});
+    
+    const token = cookies.auth_token;
+    if (!token || token.length < 16) {
+        return Response.json(
+            { message: '未登录，请先登录。' },
+            {
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                },
+                status: 401
+            }
+        );
+    }
     const originurl = new URL(request.url);
     const clientIP = request.headers.get("x-forwarded-for") || request.headers.get("clientIP");
     const userAgent = request.headers.get("user-agent");

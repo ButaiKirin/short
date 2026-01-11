@@ -200,21 +200,44 @@
           transform: rotate(360deg);
         }
       }
+
+      .login-form {
+        margin-top: 2rem;
+      }
+
+      .login-form input {
+        margin-bottom: 1rem;
+      }
+
+      .login-form input[type="password"] {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body>
     <header><h1>short</h1></header>
-    <main x-data="app" x-cloak>
-      <p x-show.transition.opacity="alert" :class="alert?.type" x-text="alert?.message"></p>
-      <input placeholder="输入要缩短的网址..." x-model="url" x-ref="url" />
-      <details>
-        <summary>自定义设置</summary>
-        <div>
-          <input placeholder="slug" x-model="slug" />
-          <small>Slug 默认是随机生成的短 id。</small>
-        </div>
-      </details>
-      <button :class="{ loading }" :disabled="loading || isValidated()" @click="submit($refs, $nextTick)">生成</button>
+    <main x-data="app" x-init="init()" x-cloak>
+      <!-- 登录表单 -->
+      <div x-show="!authenticated" class="login-form">
+        <p x-show.transition.opacity="alert" :class="alert?.type" x-text="alert?.message"></p>
+        <input type="text" placeholder="用户名" x-model="username" x-ref="username" />
+        <input type="password" placeholder="密码" x-model="password" @keyup.enter="login()" />
+        <button :class="{ loading: loginLoading }" :disabled="loginLoading" @click="login()">登录</button>
+      </div>
+
+      <!-- 链接生成表单 -->
+      <div x-show="authenticated">
+        <p x-show.transition.opacity="alert" :class="alert?.type" x-text="alert?.message"></p>
+        <input placeholder="输入要缩短的网址..." x-model="url" x-ref="url" />
+        <details>
+          <summary>自定义设置</summary>
+          <div>
+            <input placeholder="slug" x-model="slug" />
+            <small>Slug 默认是随机生成的短 id。</small>
+          </div>
+        </details>
+        <button :class="{ loading }" :disabled="loading || isValidated()" @click="submit($refs, $nextTick)">生成</button>
+      </div>
     </main>
     <footer>
      service
@@ -222,10 +245,65 @@
     <script src="asset/js/alpine.js"></script>
     <script>
       const app = {
+        authenticated: false,
+        username: '',
+        password: '',
         url: '',
         slug: '',
         alert: null,
         loading: false,
+        loginLoading: false,
+        async init() {
+          // 检查登录状态
+          await this.checkAuth()
+        },
+        async checkAuth() {
+          try {
+            const res = await fetch('/auth', {
+              method: 'get',
+              credentials: 'include'
+            })
+            const data = await res.json()
+            this.authenticated = data.authenticated === true
+          } catch (e) {
+            this.authenticated = false
+          }
+        },
+        async login() {
+          if (!this.username || !this.password) {
+            this.alert = { type: 'error', message: '请输入用户名和密码' }
+            return
+          }
+
+          this.alert = null
+          this.loginLoading = true
+
+          try {
+            const res = await fetch('/login', {
+              method: 'post',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                username: this.username,
+                password: this.password
+              })
+            })
+            const data = await res.json()
+            this.loginLoading = false
+
+            if (data.success) {
+              this.authenticated = true
+              this.alert = { type: 'success', message: '登录成功' }
+              this.username = ''
+              this.password = ''
+            } else {
+              this.alert = { type: 'error', message: data.message || '登录失败' }
+            }
+          } catch (e) {
+            this.loginLoading = false
+            this.alert = { type: 'error', message: e.message || '登录失败' }
+          }
+        },
         isValidated () {
           return !/^https?:\/\/.{3,}/.test(this.url)
         },
@@ -249,6 +327,7 @@
           fetch('/create', {
             method: 'post',
             headers: { 'content-type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(body)
           })
             .then(res => res.json())
