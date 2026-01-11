@@ -9,7 +9,22 @@ export async function onRequestGet(context) {
         'Access-Control-Allow-Credentials': 'true',
     };
 
-    // 从 cookie 中获取 token
+    // 检查是否配置了登录凭据
+    const validUser = env.USER;
+    const validPassword = env.PASSWORD;
+
+    // 如果未配置登录凭据，则不需要登录
+    if (!validUser || !validPassword) {
+        return Response.json(
+            { authenticated: true, authRequired: false },
+            {
+                headers: corsHeaders,
+                status: 200
+            }
+        );
+    }
+
+    // 如果配置了登录凭据，则检查 token
     const cookieHeader = request.headers.get('Cookie') || '';
     const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
         const [key, value] = cookie.trim().split('=');
@@ -26,7 +41,7 @@ export async function onRequestGet(context) {
         // 这里我们只检查 token 是否存在且格式正确
         if (token.length >= 16) {
             return Response.json(
-                { authenticated: true },
+                { authenticated: true, authRequired: true },
                 {
                     headers: corsHeaders,
                     status: 200
@@ -36,7 +51,7 @@ export async function onRequestGet(context) {
     }
 
     return Response.json(
-        { authenticated: false },
+        { authenticated: false, authRequired: true },
         {
             headers: corsHeaders,
             status: 401

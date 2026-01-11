@@ -212,6 +212,26 @@
       .login-form input[type="password"] {
         margin-bottom: 0;
       }
+
+      .qrcode-container {
+        margin: 1.5rem 0;
+        text-align: center;
+        padding: 1rem;
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: .25rem;
+      }
+
+      .qrcode-container canvas {
+        max-width: 100%;
+        height: auto;
+      }
+
+      .qrcode-container p {
+        margin-top: .5rem;
+        font-size: .875rem;
+        opacity: .7;
+      }
     </style>
   </head>
   <body>
@@ -237,15 +257,23 @@
           </div>
         </details>
         <button :class="{ loading }" :disabled="loading || isValidated()" @click="submit($refs, $nextTick)">生成</button>
+        
+        <!-- QR Code 显示区域 -->
+        <div x-show="qrCodeUrl" class="qrcode-container">
+          <div x-html="qrCodeHtml"></div>
+          <p>扫描二维码访问短链接</p>
+        </div>
       </div>
     </main>
     <footer>
      service
     </footer>
     <script src="asset/js/alpine.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
       const app = {
         authenticated: false,
+        authRequired: true,
         username: '',
         password: '',
         url: '',
@@ -253,6 +281,8 @@
         alert: null,
         loading: false,
         loginLoading: false,
+        qrCodeUrl: '',
+        qrCodeHtml: '',
         async init() {
           // 检查登录状态
           await this.checkAuth()
@@ -264,8 +294,12 @@
               credentials: 'include'
             })
             const data = await res.json()
-            this.authenticated = data.authenticated === true
+            this.authRequired = data.authRequired !== false
+            // 如果不需要登录，直接设置为已认证
+            this.authenticated = data.authenticated === true || !this.authRequired
           } catch (e) {
+            // 如果请求失败，假设需要登录
+            this.authRequired = true
             this.authenticated = false
           }
         },
@@ -307,6 +341,35 @@
         isValidated () {
           return !/^https?:\/\/.{3,}/.test(this.url)
         },
+        async generateQRCode(link, $nextTick, $refs) {
+          try {
+            // 使用 qrcode.js 生成 QR code
+            const canvas = document.createElement('canvas')
+            await QRCode.toCanvas(canvas, link, {
+              width: 256,
+              margin: 2,
+              color: {
+                dark: '#33404d',
+                light: '#ffffff'
+              }
+            })
+            
+            // 将 canvas 转换为 HTML
+            this.qrCodeHtml = canvas.outerHTML
+            
+            $nextTick(() => {
+              $refs.url.select()
+              this.alert = { type: 'success', message: `链接 ${document.execCommand('Copy') ? '复制' : '生成'} ` }
+            })
+          } catch (e) {
+            console.error('生成 QR code 失败:', e)
+            // 即使 QR code 生成失败，也显示成功消息
+            $nextTick(() => {
+              $refs.url.select()
+              this.alert = { type: 'success', message: `链接 ${document.execCommand('Copy') ? '复制' : '生成'} ` }
+            })
+          }
+        },
         submit ($refs, $nextTick) {
           if (!this.url) {
             this.alert = { type: 'error', message: '缺少必需的参数：url。' }
@@ -320,6 +383,8 @@
 
           this.alert = null
           this.loading = true
+          this.qrCodeUrl = ''
+          this.qrCodeHtml = ''
 
           const body = { url: this.url }
           if (this.slug) body.slug = this.slug
@@ -339,11 +404,10 @@
               }
 
               this.url = res.link
+              this.qrCodeUrl = res.link
 
-              $nextTick(() => {
-                $refs.url.select()
-                this.alert = { type: 'success', message: `链接 ${document.execCommand('Copy') ? '复制' : '生成'} ` }
-              })
+              // 生成 QR code
+              this.generateQRCode(res.link, $nextTick, $refs)
             })
             .catch(e => {
               this.alert = { type: 'error', message: e.message }
